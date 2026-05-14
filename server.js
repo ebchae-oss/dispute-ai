@@ -141,7 +141,7 @@ app.post('/api/analyze', async (req, res) => {
           if (imgBuffer.length > 4 * 1024 * 1024) {
             imgBuffer = await sharp(imgPath).resize(1280, 1280, { fit: 'inside' }).jpeg({ quality: 60 }).toBuffer();
           }
-
+imgBuffer = await sharp(imgPath).jpeg({ quality: 85 }).toBuffer();
           const base64 = imgBuffer.toString('base64');
           result.push({ type: 'text', text: `[${label}${img.desc ? ' - ' + img.desc : ''}]` });
           result.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } });
