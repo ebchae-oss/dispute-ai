@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>중고나라 분쟁조정 AI</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+:root {
+  --primary:#FF6B35; --primary-d:#e85a26;
+  --bg:#f4f5f7; --s1:#ffffff; --s2:#f8f9fa; --s3:#eef0f3;
+  --bd:#e0e3e8; --bd2:#c8cdd6;
+  --txt:#1a1d23; --muted:#6b7280;
+  --buyer:#16a34a; --seller:#2563eb; --listing:#d97706; --accent:#7c3aed;
+  --ok:#16a34a; --warn:#d97706; --danger:#dc2626;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;}
+
+header{background:var(--s1);border-bottom:1px solid var(--bd);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.logo{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;color:var(--txt);}
+.logo-icon{width:32px;height:32px;background:var(--primary);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+.nav-btn{padding:7px 16px;border-radius:8px;border:1px solid var(--bd);background:transparent;color:var(--muted);font-family:inherit;font-size:13px;cursor:pointer;transition:all .2s;}
+.nav-btn:hover{background:var(--s2);color:var(--txt);}
+.nav-btn.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+
+.page{display:grid;grid-template-columns:1fr 420px;height:calc(100vh - 60px);}
+.left{overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:14px;}
+
+input[type=text],input[type=date],select,textarea{
+  width:100%;background:var(--s1);border:1px solid var(--bd);border-radius:8px;
+  color:var(--txt);font-family:inherit;font-size:13px;padding:9px 12px;transition:border-color .2s;
+}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(255,107,53,.1);}
+input::placeholder,textarea::placeholder{color:#b0b7c3;}
+select{cursor:pointer;background:var(--s1);}
+textarea{resize:vertical;line-height:1.7;}
+
+.lbl{font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
+.f{margin-bottom:10px;}
+.f:last-child{margin-bottom:0;}
+
+.card{background:var(--s1);border:1px solid var(--bd);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+.card-hd{padding:11px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:600;background:var(--s2);border-radius:12px 12px 0 0;}
+.card-hd-l{display:flex;align-items:center;gap:7px;}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+.tag-l{color:var(--listing);} .tag-b{color:var(--buyer);} .tag-s{color:var(--seller);} .tag-c{color:var(--accent);}
+.card-bd{padding:14px 16px;}
+
+.inq-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}
+.inq-col{background:var(--s1);border:1px solid var(--bd);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+.inq-col-hd{padding:11px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:700;background:var(--s2);border-radius:12px 12px 0 0;}
+.inq-col-body{padding:10px;display:flex;flex-direction:column;gap:8px;}
+
+.inq-block{background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:11px;}
+.inq-block-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;}
+.inq-num{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+.rm-btn{width:22px;height:22px;background:var(--s1);border:1px solid var(--bd);border-radius:5px;color:var(--muted);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;}
+.rm-btn:hover{color:var(--danger);border-color:var(--danger);}
+.hd-add{padding:4px 10px;background:transparent;border:1px solid var(--bd);border-radius:6px;color:var(--muted);font-family:inherit;font-size:11px;cursor:pointer;transition:all .15s;}
+.hd-add:hover{border-color:var(--primary);color:var(--primary);}
+.custom-wrap{display:none;margin-top:6px;}
+.custom-wrap.show{display:block;}
+
+.img-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.img-col{background:var(--s1);border:1px solid var(--bd);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+.img-col-hd{padding:10px 14px;border-bottom:1px solid var(--bd);font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;background:var(--s2);}
+.img-body{padding:10px;}
+.drop{border:2px dashed var(--bd2);border-radius:9px;padding:14px 10px;text-align:center;cursor:pointer;transition:all .2s;position:relative;background:var(--s2);}
+.drop:hover,.drop.over{border-color:var(--primary);background:rgba(255,107,53,.04);}
+.drop p{color:var(--muted);font-size:11px;margin-top:4px;line-height:1.5;}
+.drop .di{font-size:20px;}
+.drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;}
+.previews{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;}
+.pv{position:relative;border-radius:8px;border:1px solid var(--bd);overflow:hidden;background:var(--s3);}
+.pv img{width:72px;height:72px;object-fit:cover;display:block;}
+.pv-rm{position:absolute;top:3px;right:3px;width:17px;height:17px;background:rgba(0,0,0,.55);border:none;border-radius:50%;color:#fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.pv-desc{width:72px;background:transparent;border:none;border-top:1px solid var(--bd);color:var(--muted);font-size:10px;padding:3px 5px;font-family:inherit;text-align:center;display:block;}
+.pv-desc:focus{outline:none;color:var(--txt);}
+.pv-desc::placeholder{color:var(--bd2);}
+
+.run-btn{width:100%;padding:15px;background:var(--primary);border:none;border-radius:12px;color:#fff;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 8px rgba(255,107,53,.3);}
+.run-btn:hover{background:var(--primary-d);transform:translateY(-1px);box-shadow:0 4px 12px rgba(255,107,53,.4);}
+.run-btn:disabled{background:#d1d5db;color:#9ca3af;cursor:not-allowed;transform:none;box-shadow:none;}
+
+.right{background:var(--s1);border-left:1px solid var(--bd);overflow-y:auto;display:flex;flex-direction:column;}
+.r-hd{padding:14px 20px;border-bottom:1px solid var(--bd);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;background:var(--s2);}
+.r-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted);font-size:14px;padding:40px;text-align:center;}
+.r-empty .ei{font-size:38px;opacity:.35;}
+.r-body{padding:18px;display:flex;flex-direction:column;gap:13px;}
+.rs{background:var(--s1);border:1px solid var(--bd);border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+.rs-hd{padding:9px 13px;border-bottom:1px solid var(--bd);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;justify-content:space-between;gap:6px;background:var(--s2);}
+.rs-body{padding:13px;font-size:13px;line-height:1.85;white-space:pre-wrap;word-break:keep-all;color:var(--txt);}
+.cp-btn{padding:3px 9px;background:var(--s1);border:1px solid var(--bd);border-radius:5px;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s;flex-shrink:0;}
+.cp-btn:hover{color:var(--txt);border-color:var(--bd2);}
+.cp-btn.done{color:var(--ok);border-color:var(--ok);}
+.sv-btn{margin:0 18px 18px;padding:11px;background:var(--s2);border:1px solid var(--bd);border-radius:10px;color:var(--txt);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px;}
+.sv-btn:hover{border-color:var(--ok);color:var(--ok);background:#f0fdf4;}
+
+#vList{display:none;padding:24px;overflow-y:auto;height:calc(100vh - 60px);}
+.cl{display:flex;flex-direction:column;gap:10px;margin-top:18px;}
+.ci{background:var(--s1);border:1px solid var(--bd);border-radius:10px;padding:15px;cursor:pointer;transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+.ci:hover{border-color:var(--primary);box-shadow:0 2px 8px rgba(255,107,53,.12);}
+.ci-title{font-size:14px;font-weight:600;margin-bottom:3px;}
+.ci-prod{font-size:12px;color:var(--listing);margin-bottom:3px;}
+.ci-date{font-size:12px;color:var(--muted);margin-bottom:7px;font-family:'JetBrains Mono',monospace;}
+.ci-sum{font-size:13px;color:var(--muted);line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;padding:24px;}
+.mo.show{display:flex;}
+.mo-box{background:var(--s1);border:1px solid var(--bd);border-radius:16px;width:100%;max-width:680px;max-height:82vh;overflow-y:auto;padding:22px;display:flex;flex-direction:column;gap:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);}
+.mo-close{align-self:flex-end;background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:6px 12px;color:var(--muted);cursor:pointer;font-family:inherit;font-size:13px;}
+.mo-close:hover{color:var(--txt);}
+
+.ld{display:none;position:fixed;inset:0;background:rgba(255,255,255,.75);z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:14px;}
+.ld.show{display:flex;}
+.spin{width:42px;height:42px;border:3px solid var(--bd);border-top-color:var(--primary);border-radius:50%;animation:sp .8s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg);}}
+.ld-txt{color:var(--txt);font-size:14px;font-weight:500;}
+
+.toast{position:fixed;bottom:22px;right:22px;background:var(--s1);border:1px solid var(--bd);border-radius:10px;padding:11px 16px;font-size:13px;font-weight:500;z-index:400;transform:translateY(70px);opacity:0;transition:all .3s;box-shadow:0 4px 12px rgba(0,0,0,.12);}
+.toast.show{transform:translateY(0);opacity:1;}
+.toast.ok{border-color:var(--ok);color:var(--ok);}
+.toast.err{border-color:var(--danger);color:var(--danger);}
+
+::-webkit-scrollbar{width:5px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="logo-icon">⚖️</div>중고나라 분쟁조정 AI</div>
+  <div style="display:flex;gap:8px;">
+    <button class="nav-btn active" id="btnNew" onclick="showView('new')">➕ 새 케이스</button>
+    <button class="nav-btn" id="btnList" onclick="showView('list')">📋 케이스 목록</button>
+  </div>
+</header>
+
+<div id="vNew" class="page">
+  <div class="left">
+
+    <div>
+      <div class="lbl">케이스 제목</div>
+      <input type="text" id="caseTitle" placeholder="예: 아이폰15 파손 분쟁 / 홍길동">
+    </div>
+
+    <div class="card">
+      <div class="card-hd"><div class="card-hd-l tag-l"><span class="dot"></span>상품 정보</div></div>
+      <div class="card-bd">
+        <div class="f">
+          <div class="lbl">상품명</div>
+          <input type="text" id="productName" placeholder="예: 아이폰 15 Pro 256GB 블랙">
+        </div>
+        <div class="f">
+          <div class="lbl">판매글 내용</div>
+          <textarea id="listingContent" rows="4" placeholder="판매 당시 올렸던 글을 붙여넣기 하세요. 상품명, 상태, 가격, 설명 등 원문 그대로."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="inq-cols">
+      <div class="inq-col">
+        <div class="inq-col-hd tag-b">
+          <div class="card-hd-l"><span class="dot"></span>구매자 문의</div>
+          <button class="hd-add" onclick="addInq('buyer')">+ 추가</button>
+        </div>
+        <div class="inq-col-body" id="buyerInqs"></div>
+      </div>
+      <div class="inq-col">
+        <div class="inq-col-hd tag-s">
+          <div class="card-hd-l"><span class="dot"></span>판매자 문의</div>
+          <button class="hd-add" onclick="addInq('seller')">+ 추가</button>
+        </div>
+        <div class="inq-col-body" id="sellerInqs"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd"><div class="card-hd-l tag-c"><span class="dot"></span>채팅 내역</div></div>
+      <div class="card-bd">
+        <textarea id="chatHistory" rows="6" placeholder="구매자-판매자 간 채팅 내역을 붙여넣기 하세요. 날짜·닉네임 포함 원문 그대로."></textarea>
+      </div>
+    </div>
+
+    <div class="img-cols">
+      <div class="img-col">
+        <div class="img-col-hd tag-l"><span class="dot"></span>판매 당시 사진</div>
+        <div class="img-body">
+          <div class="drop" id="dListing" ondragover="ov(event,'listing')" ondragleave="ol('listing')" ondrop="od(event,'listing')">
+            <input type="file" accept="image/*" multiple onchange="fs(event,'listing')">
+            <div class="di">🏷️</div>
+            <p>클릭 또는 드래그<br>Ctrl+V 붙여넣기 가능</p>
+          </div>
+          <div class="previews" id="pvListing"></div>
+        </div>
+      </div>
+      <div class="img-col">
+        <div class="img-col-hd tag-b"><span class="dot"></span>구매자 증빙 사진</div>
+        <div class="img-body">
+          <div class="drop" id="dBuyer" ondragover="ov(event,'buyer')" ondragleave="ol('buyer')" ondrop="od(event,'buyer')">
+            <input type="file" accept="image/*" multiple onchange="fs(event,'buyer')">
+            <div class="di">📷</div>
+            <p>하자·불량 사진<br>사진 아래 설명 입력 가능</p>
+          </div>
+          <div class="previews" id="pvBuyer"></div>
+        </div>
+      </div>
+      <div class="img-col">
+        <div class="img-col-hd tag-s"><span class="dot"></span>판매자 증빙 사진</div>
+        <div class="img-body">
+          <div class="drop" id="dSeller" ondragover="ov(event,'seller')" ondragleave="ol('seller')" ondrop="od(event,'seller')">
+            <input type="file" accept="image/*" multiple onchange="fs(event,'seller')">
+            <div class="di">📦</div>
+            <p>발송·반품 수령 사진<br>사진 아래 설명 입력 가능</p>
+          </div>
+          <div class="previews" id="pvSeller"></div>
+        </div>
+      </div>
+    </div>
+
+    <button class="run-btn" id="runBtn" onclick="analyze()">⚖️ AI 분쟁 분석 시작</button>
+
+  </div>
+
+  <div class="right">
+    <div class="r-hd">AI 분석 결과</div>
+    <div class="r-empty" id="rEmpty">
+      <div class="ei">📊</div>
+      <div>내용 입력 후<br>AI 분석을 시작하면<br>결과가 여기에 표시됩니다.</div>
+    </div>
+    <div class="r-body" id="rBody" style="display:none;"></div>
+    <button class="sv-btn" id="svBtn" style="display:none;" onclick="saveCase()">💾 케이스 저장</button>
+  </div>
+</div>
+
+<div id="vList">
+  <div style="font-size:18px;font-weight:700;margin-bottom:4px;">케이스 목록</div>
+  <div style="font-size:13px;color:var(--muted);">저장된 분쟁 케이스를 조회합니다.</div>
+  <div class="cl" id="caseList"></div>
+</div>
+
+<div class="mo" id="modal" onclick="closeMo(event)">
+  <div class="mo-box">
+    <button class="mo-close" onclick="closeMoD()">✕ 닫기</button>
+    <div id="moBody"></div>
+  </div>
+</div>
+
+<div class="ld" id="ld">
+  <div class="spin"></div>
+  <div class="ld-txt">AI가 분쟁을 분석하고 있습니다...</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const TYPES=['환불 요청','상품 불량','배송 문제','반품 거부','판매글과 실제 상품 상이','사기 의심','연락 두절','기타 (직접 입력)'];
+const imgs={listing:[],buyer:[],seller:[]};
+let bCount=0,sCount=0,curResult=null,activeZone='listing';
+
+window.onload=()=>{ addInq('buyer'); addInq('seller'); };
+
+function addInq(side){
+  const cont=document.getElementById(side==='buyer'?'buyerInqs':'sellerInqs');
+  const num=side==='buyer'?++bCount:++sCount;
+  const id=side+'_'+Date.now();
+  const opts=TYPES.map(t=>`<option value="${t}">${t}</option>`).join('');
+  const el=document.createElement('div');
+  el.className='inq-block'; el.id=id;
+  el.innerHTML=`
+    <div class="inq-block-top">
+      <span class="inq-num">${num}차 문의</span>
+      <button class="rm-btn" onclick="rmInq('${id}','${side}')">✕</button>
+    </div>
+    <div class="f">
+      <div class="lbl">날짜 (선택)</div>
+      <input type="date" class="iq-date">
+    </div>
+    <div class="f">
+      <div class="lbl">문의 유형</div>
+      <select class="iq-type" onchange="onType(this)"><option value="">유형 선택</option>${opts}</select>
+      <div class="custom-wrap"><input type="text" class="iq-custom" placeholder="유형 직접 입력"></div>
+    </div>
+    <div class="f">
+      <div class="lbl">문의 내용</div>
+      <textarea class="iq-cont" rows="4" placeholder="문의 내용을 입력하세요"></textarea>
+    </div>`;
+  cont.appendChild(el);
+}
+
+function onType(sel){
+  sel.parentElement.querySelector('.custom-wrap').classList.toggle('show',sel.value==='기타 (직접 입력)');
+}
+function rmInq(id,side){ document.getElementById(id)?.remove(); renum(side); }
+function renum(side){
+  document.querySelectorAll('#'+(side==='buyer'?'buyerInqs':'sellerInqs')+' .inq-block').forEach((b,i)=>{
+    const s=b.querySelector('.inq-num'); if(s) s.textContent=(i+1)+'차 문의';
+  });
+}
+function getInqs(side){
+  return Array.from(document.querySelectorAll('#'+(side==='buyer'?'buyerInqs':'sellerInqs')+' .inq-block')).map(b=>{
+    const sel=b.querySelector('.iq-type');
+    const custom=b.querySelector('.iq-custom');
+    const type=sel.value==='기타 (직접 입력)'&&custom?.value.trim()?custom.value.trim():sel.value;
+    return {date:b.querySelector('.iq-date').value,type,content:b.querySelector('.iq-cont').value.trim()};
+  }).filter(q=>q.content||q.type);
+}
+
+async function uploadFiles(files,zone){
+  const valid=files.filter(f=>f.type.startsWith('image/'));
+  if(!valid.length) return;
+  const fd=new FormData();
+  valid.forEach(f=>fd.append('images',f));
+  try{
+    const res=await fetch('/api/upload',{method:'POST',body:fd});
+    const data=await res.json();
+    if(data.success) data.files.forEach(f=>{ imgs[zone].push({url:f.url,desc:''}); addPv(f.url,zone); });
+  }catch{ toast('이미지 업로드 실패','err'); }
+}
+
+function addPv(url,zone){
+  const cont=document.getElementById('pv'+cap(zone));
+  const el=document.createElement('div');
+  el.className='pv'; el.dataset.url=url;
+  el.innerHTML=`<img src="${url}"><button class="pv-rm" onclick="rmImg(this,'${url}','${zone}')">✕</button><input class="pv-desc" type="text" placeholder="사진 설명" oninput="updDesc(this,'${url}','${zone}')">`;
+  cont.appendChild(el);
+}
+function updDesc(inp,url,zone){ const i=imgs[zone].find(x=>x.url===url); if(i) i.desc=inp.value; }
+function rmImg(btn,url,zone){ imgs[zone]=imgs[zone].filter(i=>i.url!==url); btn.parentElement.remove(); }
+function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+function fs(e,zone){ uploadFiles(Array.from(e.target.files),zone); }
+function ov(e,zone){ e.preventDefault(); document.getElementById('d'+cap(zone)).classList.add('over'); }
+function ol(zone){ document.getElementById('d'+cap(zone)).classList.remove('over'); }
+function od(e,zone){ e.preventDefault(); ol(zone); uploadFiles(Array.from(e.dataTransfer.files),zone); }
+
+['Listing','Buyer','Seller'].forEach(z=>{
+  document.getElementById('d'+z)?.addEventListener('mouseenter',()=>activeZone=z.toLowerCase());
+});
+document.addEventListener('paste',async e=>{
+  const items=Array.from(e.clipboardData.items).filter(i=>i.type.startsWith('image/'));
+  if(!items.length) return;
+  await uploadFiles(items.map(i=>i.getAsFile()),activeZone);
+  const labels={listing:'판매 당시',buyer:'구매자 증빙',seller:'판매자 증빙'};
+  toast(`[${labels[activeZone]}] 사진에 추가됐습니다 ✓`,'ok');
+});
+
+async function analyze(){
+  const buyerInqs=getInqs('buyer'),sellerInqs=getInqs('seller');
+  const chat=document.getElementById('chatHistory').value.trim();
+  if(!buyerInqs.length&&!sellerInqs.length&&!chat){ toast('구매자 또는 판매자 문의 내용을 입력해주세요.','err'); return; }
+  const btn=document.getElementById('runBtn');
+  btn.disabled=true; btn.textContent='분석 중...';
+  document.getElementById('ld').classList.add('show');
+  try{
+    const res=await fetch('/api/analyze',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        caseTitle:document.getElementById('caseTitle').value.trim(),
+        productName:document.getElementById('productName').value.trim(),
+        listingContent:document.getElementById('listingContent').value.trim(),
+        buyerInquiries:buyerInqs,sellerInquiries:sellerInqs,
+        chatHistory:chat,
+        listingImages:imgs.listing,buyerImages:imgs.buyer,sellerImages:imgs.seller
+      })
+    });
+    const data=await res.json();
+    if(!data.success) throw new Error(data.error);
+    curResult=data.result;
+    renderResult(data.result);
+  }catch(e){ toast('분석 오류: '+e.message,'err'); }
+  finally{ btn.disabled=false; btn.textContent='⚖️ AI 분쟁 분석 시작'; document.getElementById('ld').classList.remove('show'); }
+}
+
+function renderResult(r){
+  document.getElementById('rEmpty').style.display='none';
+  document.getElementById('svBtn').style.display='flex';
+  const secs=[
+    {label:'📋 분쟁 핵심 요약',key:'summary',color:'var(--accent)'},
+    {label:'🔍 상황 분석 및 쟁점',key:'analysis',color:'var(--txt)'},
+    {label:'👤 구매자 회신 초안',key:'buyerReply',color:'var(--buyer)'},
+    {label:'🏪 판매자 회신 초안',key:'sellerReply',color:'var(--seller)'},
+    {label:'💡 처리 방향 권고',key:'recommendation',color:'var(--warn)'},
+  ];
+  const body=document.getElementById('rBody');
+  body.style.display='flex';
+  body.innerHTML=secs.map(s=>`
+    <div class="rs">
+      <div class="rs-hd" style="color:${s.color}">
+        <span>${s.label}</span>
+        <button class="cp-btn" onclick="cp(this,\`${esc(r[s.key]||'')}\`)">복사</button>
+      </div>
+      <div class="rs-body">${eh(r[s.key]||'-')}</div>
+    </div>`).join('');
+}
+
+function eh(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s){ return s.replace(/`/g,'\\`').replace(/\$/g,'\\$'); }
+function cp(btn,txt){
+  navigator.clipboard.writeText(txt).then(()=>{
+    btn.textContent='✓ 복사됨'; btn.classList.add('done');
+    setTimeout(()=>{ btn.textContent='복사'; btn.classList.remove('done'); },2000);
+  });
+}
+
+async function saveCase(){
+  if(!curResult) return;
+  try{
+    const res=await fetch('/api/cases',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        caseTitle:document.getElementById('caseTitle').value.trim()||'제목 없음',
+        productName:document.getElementById('productName').value.trim(),
+        listingContent:document.getElementById('listingContent').value.trim(),
+        buyerInquiries:getInqs('buyer'),sellerInquiries:getInqs('seller'),
+        chatHistory:document.getElementById('chatHistory').value.trim(),
+        listingImages:imgs.listing,buyerImages:imgs.buyer,sellerImages:imgs.seller,
+        result:curResult
+      })
+    });
+    const data=await res.json();
+    if(data.success) toast('케이스가 저장됐습니다 ✓','ok');
+    else throw new Error();
+  }catch{ toast('저장 오류가 발생했습니다.','err'); }
+}
+
+async function loadCases(){
+  try{
+    const res=await fetch('/api/cases');
+    const data=await res.json();
+    const list=document.getElementById('caseList');
+    if(!data.cases.length){ list.innerHTML='<div style="color:var(--muted);font-size:14px;text-align:center;padding:40px">저장된 케이스가 없습니다.</div>'; return; }
+    list.innerHTML=data.cases.map(c=>`
+      <div class="ci" onclick="viewCase('${c.id}')">
+        <div class="ci-title">${eh(c.caseTitle)}</div>
+        ${c.productName?`<div class="ci-prod">🏷️ ${eh(c.productName)}</div>`:''}
+        <div class="ci-date">${new Date(c.createdAt).toLocaleString('ko-KR')}</div>
+        <div class="ci-sum">${eh(c.summary)}</div>
+      </div>`).join('');
+  }catch{ toast('목록 불러오기 실패','err'); }
+}
+
+async function viewCase(id){
+  try{
+    const res=await fetch('/api/cases/'+id);
+    const data=await res.json();
+    if(!data.success) return;
+    const c=data.case,r=c.result||{};
+    document.getElementById('moBody').innerHTML=`
+      <div style="font-size:17px;font-weight:700;margin-bottom:3px">${eh(c.caseTitle||'제목 없음')}</div>
+      ${c.productName?`<div style="font-size:12px;color:var(--listing);margin-bottom:3px">🏷️ ${eh(c.productName)}</div>`:''}
+      <div style="font-size:12px;color:var(--muted);margin-bottom:18px;font-family:'JetBrains Mono',monospace">${new Date(c.createdAt).toLocaleString('ko-KR')}</div>
+      ${[['📋 분쟁 핵심 요약',r.summary],['🔍 상황 분석',r.analysis],['👤 구매자 회신 초안',r.buyerReply],['🏪 판매자 회신 초안',r.sellerReply],['💡 처리 방향 권고',r.recommendation]]
+        .filter(([,v])=>v).map(([l,v])=>`
+          <div style="margin-bottom:13px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em">${l}</div>
+            <div style="font-size:13px;line-height:1.85;white-space:pre-wrap;background:var(--s2);border-radius:8px;padding:12px;border:1px solid var(--bd)">${eh(v)}</div>
+          </div>`).join('')}`;
+    document.getElementById('modal').classList.add('show');
+  }catch{ toast('케이스 조회 실패','err'); }
+}
+
+function closeMo(e){ if(e.target===document.getElementById('modal')) closeMoD(); }
+function closeMoD(){ document.getElementById('modal').classList.remove('show'); }
+
+function showView(v){
+  document.getElementById('vNew').style.display=v==='new'?'grid':'none';
+  document.getElementById('vList').style.display=v==='list'?'block':'none';
+  document.getElementById('btnNew').classList.toggle('active',v==='new');
+  document.getElementById('btnList').classList.toggle('active',v==='list');
+  if(v==='list') loadCases();
+}
+
+function toast(msg,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show '+(type==='ok'?'ok':type==='err'?'err':'');
+  setTimeout(()=>{ t.className='toast'; },3000);
+}
+</script>
+</body>
+</html>
