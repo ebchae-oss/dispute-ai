@@ -4,6 +4,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const sharp = require('sharp');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,12 +19,70 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => { const ext = path.extname(file.originalname); cb(null, `${uuidv4()}${ext}`); }
 });
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 }, fileFilter: (req, file, cb) => { if (file.mimetype.startsWith('image/')) cb(null, true); else cb(new Error('이미지만 가능')); } });
+const upload = multer({ storage, limits: { fileSize: 30 * 1024 * 1024 } }); // 30MB까지 받고 서버에서 압축
 
 app.use(cors());
 app.use(express.json({ limit: '30mb' }));
 app.use(express.static(__dirname));
 app.use('/uploads', express.static(uploadDir));
+
+// 이미지 압축 함수 (4MB 이하로)
+async function compressImage(filePath) {
+  const MAX_SIZE = 4 * 1024 * 1024; // 4MB
+  const stat = fs.statSync(filePath);
+  if (stat.size <= MAX_SIZE) return; // 이미 작으면 패스
+
+  const ext = path.extname(filePath).toLowerCase();
+  const tmpPath = filePath + '.tmp';
+
+  try {
+    let quality = 80;
+    let compressed;
+
+    // 먼저 리사이즈 (최대 1920px)
+    if (ext === '.png') {
+      compressed = await sharp(filePath)
+        .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality })
+        .toBuffer();
+    } else {
+      compressed = await sharp(filePath)
+        .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality })
+        .toBuffer();
+    }
+
+    // 여전히 크면 quality 낮춤
+    while (compressed.length > MAX_SIZE && quality > 20) {
+      quality -= 10;
+      compressed = await sharp(filePath)
+        .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality })
+        .toBuffer();
+    }
+
+    // 그래도 크면 해상도도 낮춤
+    if (compressed.length > MAX_SIZE) {
+      compressed = await sharp(filePath)
+        .resize(1280, 1280, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 60 })
+        .toBuffer();
+    }
+
+    // 새 파일명 (jpg로 변환)
+    const newPath = filePath.replace(/\.[^.]+$/, '.jpg');
+    fs.writeFileSync(newPath, compressed);
+
+    // 원본이 다른 확장자면 삭제
+    if (newPath !== filePath) {
+      fs.unlinkSync(filePath);
+    }
+
+    console.log(`이미지 압축: ${stat.size} -> ${compressed.length} bytes`);
+  } catch (e) {
+    console.error('압축 실패:', e.message);
+  }
+}
 
 // Supabase 요청 헬퍼
 async function sbFetch(path, options = {}) {
@@ -43,9 +102,21 @@ async function sbFetch(path, options = {}) {
 }
 
 // 이미지 업로드
-app.post('/api/upload', upload.array('images', 20), (req, res) => {
-  const files = req.files.map(f => ({ filename: f.filename, url: `/uploads/${f.filename}` }));
-  res.json({ success: true, files });
+app.post('/api/upload', upload.array('images', 20), async (req, res) => {
+  try {
+    const files = [];
+    for (const f of req.files) {
+      await compressImage(f.path);
+      // 압축 후 파일명 확인 (jpg로 바뀔 수 있음)
+      const baseName = path.basename(f.filename, path.extname(f.filename));
+      const jpgPath = path.join(uploadDir, baseName + '.jpg');
+      const finalFilename = fs.existsSync(jpgPath) ? baseName + '.jpg' : f.filename;
+      files.push({ filename: finalFilename, url: `/uploads/${finalFilename}` });
+    }
+    res.json({ success: true, files });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // Claude 분석
@@ -57,13 +128,23 @@ app.post('/api/analyze', async (req, res) => {
     if (!imgs || !imgs.length) return result;
     for (const img of imgs) {
       try {
-        const imgPath = path.join(uploadDir, path.basename(img.url));
+        let imgPath = path.join(uploadDir, path.basename(img.url));
+        // jpg 버전 확인
+        const baseName = path.basename(imgPath, path.extname(imgPath));
+        const jpgPath = path.join(uploadDir, baseName + '.jpg');
+        if (!fs.existsSync(imgPath) && fs.existsSync(jpgPath)) imgPath = jpgPath;
+
         if (fs.existsSync(imgPath)) {
-          const base64 = fs.readFileSync(imgPath).toString('base64');
-          const ext = path.extname(imgPath).toLowerCase().replace('.', '');
-          const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
+          let imgBuffer = fs.readFileSync(imgPath);
+
+          // 혹시 아직 크면 추가 압축
+          if (imgBuffer.length > 4 * 1024 * 1024) {
+            imgBuffer = await sharp(imgPath).resize(1280, 1280, { fit: 'inside' }).jpeg({ quality: 60 }).toBuffer();
+          }
+
+          const base64 = imgBuffer.toString('base64');
           result.push({ type: 'text', text: `[${label}${img.desc ? ' - ' + img.desc : ''}]` });
-          result.push({ type: 'image', source: { type: 'base64', media_type: mimeMap[ext] || 'image/jpeg', data: base64 } });
+          result.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } });
         }
       } catch (e) { console.error('이미지 로드 실패:', e.message); }
     }
@@ -139,7 +220,7 @@ ${isFollowUp ? '이번 분석은 기존 1차 분석 이후 추가 문의에 대�
   }
 });
 
-// 케이스 저장 (Supabase)
+// 케이스 저장
 app.post('/api/cases', async (req, res) => {
   try {
     const caseData = {
@@ -168,16 +249,11 @@ app.get('/api/cases', async (req, res) => {
   try {
     const data = await sbFetch('/cases?select=id,case_title,product_name,created_at,result&order=created_at.desc');
     const cases = (data || []).map(c => ({
-      id: c.id,
-      caseTitle: c.case_title,
-      productName: c.product_name,
-      createdAt: c.created_at,
-      summary: c.result?.summary || ''
+      id: c.id, caseTitle: c.case_title, productName: c.product_name,
+      createdAt: c.created_at, summary: c.result?.summary || ''
     }));
     res.json({ success: true, cases });
-  } catch (e) {
-    res.json({ success: true, cases: [] });
-  }
+  } catch (e) { res.json({ success: true, cases: [] }); }
 });
 
 // 케이스 상세
@@ -194,34 +270,27 @@ app.get('/api/cases/:id', async (req, res) => {
       sellerImages: c.seller_images, result: c.result, followUps: c.follow_ups || [],
       createdAt: c.created_at
     }});
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-// 2차 추가 문의 저장
+// 2차 추가 문의
 app.post('/api/cases/:id/followup', async (req, res) => {
   try {
     const existing = await sbFetch(`/cases?id=eq.${req.params.id}`);
     if (!existing || !existing.length) return res.status(404).json({ success: false, error: '케이스를 찾을 수 없습니다.' });
     const followUps = existing[0].follow_ups || [];
-    const newFollowUp = { id: uuidv4(), createdAt: new Date().toISOString(), ...req.body };
-    followUps.push(newFollowUp);
+    followUps.push({ id: uuidv4(), createdAt: new Date().toISOString(), ...req.body });
     await sbFetch(`/cases?id=eq.${req.params.id}`, { method: 'PATCH', body: JSON.stringify({ follow_ups: followUps }) });
     res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-// 엑셀 다운로드용 전체 케이스
+// 엑셀 다운로드
 app.get('/api/cases/export/excel', async (req, res) => {
   try {
     const data = await sbFetch('/cases?select=*&order=created_at.desc');
     res.json({ success: true, cases: data || [] });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
