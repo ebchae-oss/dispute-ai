@@ -96,6 +96,8 @@ textarea{resize:vertical;line-height:1.7;}
 
 /* 케이스 목록 */
 #vList{display:none;padding:24px;overflow-y:auto;height:calc(100vh - 62px);}
+.qp-box{padding:10px 14px;background:var(--s2);border-bottom:1px solid var(--bd);}
+.qp-box textarea{font-size:12px;}
 .list-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
 .excel-btn{padding:8px 16px;background:var(--primary-light);border:1px solid var(--primary);border-radius:8px;color:var(--primary);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:6px;}
 .excel-btn:hover{background:var(--primary);color:#fff;}
@@ -163,6 +165,7 @@ textarea{resize:vertical;line-height:1.7;}
     <div>
       <div class="lbl">케이스 제목</div>
       <input type="text" id="caseTitle" placeholder="예: 아이폰15 파손 분쟁 / 홍길동">
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">💡 간단 문의(1차 또는 2~3회 정도)는 아래 구매자/판매자 칸 위쪽 붙여넣기만 쓰셔도 되고, 서로 미수긍하며 여러 번 핑퐁된 깊은 케이스는 그 아래 차수별 문의·채팅·사진까지 채워서 분석하시면 됩니다. 어느 쪽이든 공정위 분쟁해결기준을 근거로 판단해드려요.</div>
     </div>
     <div class="card">
       <div class="card-hd"><div class="card-hd-l tag-l"><span class="dot"></span>상품 정보</div></div>
@@ -174,10 +177,24 @@ textarea{resize:vertical;line-height:1.7;}
     <div class="inq-cols">
       <div class="inq-col">
         <div class="inq-col-hd tag-b"><div class="card-hd-l"><span class="dot"></span>구매자 문의</div><button class="hd-add" onclick="addInq('buyer')">+ 추가</button></div>
+        <div class="qp-box qp-buyer">
+          <textarea id="qpBuyer" rows="3" placeholder="구매자한테서 온 문의 내용을 여기에 붙여넣으세요. (여러 차례 재인입된 내용도 한 번에 붙여넣기 가능)"></textarea>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:6px;flex-wrap:wrap;">
+            <button class="hd-add" id="qpBuyerBtn" onclick="sideParse('buyer')" style="padding:6px 12px;font-size:12px;">🤖 자동 분류해서 채우기</button>
+            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer;"><input type="checkbox" id="qpBuyerAppend" style="width:auto;">이어붙이기</label>
+          </div>
+        </div>
         <div class="inq-col-body" id="buyerInqs"></div>
       </div>
       <div class="inq-col">
         <div class="inq-col-hd tag-s"><div class="card-hd-l"><span class="dot"></span>판매자 문의</div><button class="hd-add" onclick="addInq('seller')">+ 추가</button></div>
+        <div class="qp-box qp-seller">
+          <textarea id="qpSeller" rows="3" placeholder="판매자한테서 온 문의 내용을 여기에 붙여넣으세요. (여러 차례 재인입된 내용도 한 번에 붙여넣기 가능)"></textarea>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:6px;flex-wrap:wrap;">
+            <button class="hd-add" id="qpSellerBtn" onclick="sideParse('seller')" style="padding:6px 12px;font-size:12px;">🤖 자동 분류해서 채우기</button>
+            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer;"><input type="checkbox" id="qpSellerAppend" style="width:auto;">이어붙이기</label>
+          </div>
+        </div>
         <div class="inq-col-body" id="sellerInqs"></div>
       </div>
     </div>
@@ -291,6 +308,47 @@ function getInqs(side){
   }).filter(q=>q.content||q.type);
 }
 
+async function sideParse(side){
+  const taId=side==='buyer'?'qpBuyer':'qpSeller';
+  const btnId=side==='buyer'?'qpBuyerBtn':'qpSellerBtn';
+  const appendId=side==='buyer'?'qpBuyerAppend':'qpSellerAppend';
+  const label=side==='buyer'?'구매자':'판매자';
+
+  const raw=document.getElementById(taId).value.trim();
+  if(!raw){ toast(`붙여넣을 ${label} 문의 내용이 없습니다.`,'err'); return; }
+  const append=document.getElementById(appendId).checked;
+  const btn=document.getElementById(btnId);
+  btn.disabled=true; btn.textContent='분류 중...';
+  try{
+    const res=await fetch('/api/parse-inquiries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rawText:raw,side})});
+    const data=await res.json();
+    if(!data.success) throw new Error(data.error);
+    fillInqs(side,data.items,append);
+    toast(`${label} 문의 ${data.items.length}건 자동 분류 완료 ✓`,'ok');
+    document.getElementById(taId).value='';
+  }catch(e){ toast('자동 분류 오류: '+e.message,'err'); }
+  finally{ btn.disabled=false; btn.textContent='🤖 자동 분류해서 채우기'; }
+}
+
+function fillInqs(side,list,append){
+  const cont=document.getElementById(side==='buyer'?'buyerInqs':'sellerInqs');
+  if(!append){ cont.innerHTML=''; if(side==='buyer') bCount=0; else sCount=0; }
+  (list||[]).forEach(item=>{
+    addInq(side);
+    const blocks=cont.querySelectorAll('.inq-block');
+    const el=blocks[blocks.length-1];
+    el.querySelector('.iq-date').value=item.date||'';
+    const sel=el.querySelector('.iq-type');
+    const hasType=TYPES.includes(item.type);
+    sel.value=hasType?item.type:'기타 (직접 입력)';
+    if(!hasType){
+      el.querySelector('.custom-wrap').classList.add('show');
+      el.querySelector('.iq-custom').value=item.type||'';
+    }
+    el.querySelector('.iq-cont').value=item.content||'';
+  });
+}
+
 async function uploadFiles(files,zone){
   const valid=files.filter(f=>f.type.startsWith('image/'));
   if(!valid.length) return;
@@ -355,20 +413,61 @@ async function analyze(){
 function renderResult(r){
   document.getElementById('rEmpty').style.display='none';
   document.getElementById('svBtn').style.display='flex';
+  const standardText=[
+    r.appliedItemCategory?`품목: ${r.appliedItemCategory}`:'',
+    r.appliedDefectLevel?`하자유형: ${r.appliedDefectLevel}`:'',
+    r.appliedPeriod?`경과기간: ${r.appliedPeriod}`:'',
+    r.appliedArticle?`근거조항(별표1): ${r.appliedArticle}`:'',
+    r.suggestedResolution?`권고안: ${r.suggestedResolution}`:'',
+  ].filter(Boolean).join('\n');
   const secs=[
     {label:'📋 분쟁 핵심 요약',key:'summary',color:'var(--accent)'},
     {label:'🔍 상황 분석 및 쟁점',key:'analysis',color:'var(--txt)'},
+    {label:'📐 분쟁해결기준 적용 근거',key:'__standard',color:'var(--warn)',text:standardText},
     {label:'👤 구매자 회신 초안',key:'buyerReply',color:'var(--buyer)'},
     {label:'🏪 판매자 회신 초안',key:'sellerReply',color:'var(--seller)'},
     {label:'💡 처리 방향 권고',key:'recommendation',color:'var(--warn)'},
-  ];
+  ].filter(s=>s.key!=='__standard'||standardText);
   const body=document.getElementById('rBody');
   body.style.display='flex';
-  body.innerHTML=secs.map(s=>`
+  body.innerHTML=secs.map(s=>{
+    const val=s.text!==undefined?s.text:(r[s.key]||'');
+    return `
     <div class="rs">
-      <div class="rs-hd" style="color:${s.color}"><span>${s.label}</span><button class="cp-btn" onclick="cp(this,\`${esc(r[s.key]||'')}\`)">복사</button></div>
-      <div class="rs-body">${eh(r[s.key]||'-')}</div>
-    </div>`).join('');
+      <div class="rs-hd" style="color:${s.color}"><span>${s.label}</span><button class="cp-btn" onclick="cp(this,\`${esc(val)}\`)">복사</button></div>
+      <div class="rs-body">${eh(val||'-')}</div>
+    </div>`;
+  }).join('')+
+  `<button class="excel-btn" onclick="exportCaseResultExcel()">📊 분쟁기록_로그 형식으로 엑셀 다운로드</button>`;
+}
+
+function exportCaseResultExcel(){
+  if(!curResult){ toast('먼저 AI 분석을 실행해주세요.','err'); return; }
+  const r=curResult;
+  const isUsed = r.appliedItemCategory && r.appliedItemCategory!=='해당없음';
+  const row={
+    '번호':1,
+    '기록일': new Date().toISOString().slice(0,10),
+    '담당자':'',
+    '케이스/티켓번호': document.getElementById('caseTitle').value.trim(),
+    '거래유형':'',
+    '품목대분류': r.appliedItemCategory||'',
+    '세부품목명': document.getElementById('productName').value.trim(),
+    '하자유형': r.appliedDefectLevel||'',
+    '수령후경과기간': r.appliedPeriod||'',
+    '기준 활용여부': isUsed?'Y':'N',
+    '활용근거(별표1 조항)': r.appliedArticle||'',
+    '활용근거(별표2 품목표)': r.appliedItemCategory||'',
+    '처리결과':'처리중',
+    '미활용 사유(N인 경우)': isUsed?'':'품목표 미적용 또는 정보 부족',
+    '비고': r.summary||'',
+  };
+  const ws=XLSX.utils.json_to_sheet([row]);
+  ws['!cols']=[{wch:6},{wch:12},{wch:10},{wch:16},{wch:10},{wch:18},{wch:16},{wch:14},{wch:14},{wch:12},{wch:26},{wch:22},{wch:16},{wch:24},{wch:40}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'분쟁기록_로그');
+  XLSX.writeFile(wb,`분쟁기록_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('엑셀 다운로드 완료 ✓ 기존 분쟁기록_로그 시트 3행 이하에 붙여넣으시면 돼요','ok');
 }
 
 function eh(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -417,6 +516,15 @@ async function loadCases(){
   }catch{ toast('목록 불러오기 실패','err'); }
 }
 
+function fuInquiryText(fu, side){
+  // 신규 형식(배열: buyerInquiries/sellerInquiries) 우선, 구버전 단일 문자열(buyerInquiry/sellerInquiry)도 지원
+  const arrKey=side+'Inquiries', legacyKey=side+'Inquiry';
+  if(Array.isArray(fu[arrKey]) && fu[arrKey].length){
+    return fu[arrKey].map(q=>`${q.type?`[${q.type}] `:''}${q.content||''}`).filter(Boolean).join('\n');
+  }
+  return fu[legacyKey]||'';
+}
+
 async function viewCase(id){
   try{
     const res=await fetch('/api/cases/'+id);
@@ -425,18 +533,27 @@ async function viewCase(id){
     const c=data.case,r=c.result||{};
     const followUps=c.followUps||[];
 
-    const followUpHistoryHtml = followUps.length ? followUps.map((fu,i)=>`
+    const followUpHistoryHtml = followUps.length ? followUps.map((fu,i)=>{
+      const buyerTxt=fuInquiryText(fu,'buyer'), sellerTxt=fuInquiryText(fu,'seller');
+      const standardTxt=fu.result?[
+        fu.result.appliedItemCategory?`품목: ${fu.result.appliedItemCategory}`:'',
+        fu.result.appliedArticle?`근거조항: ${fu.result.appliedArticle}`:'',
+        fu.result.suggestedResolution?`권고안: ${fu.result.suggestedResolution}`:'',
+      ].filter(Boolean).join(' · '):'';
+      return `
       <div class="followup-item">
         <div class="followup-item-date">${i+1}차 추가문의 · ${new Date(fu.createdAt).toLocaleString('ko-KR')}</div>
-        ${fu.buyerInquiry?`<div class="followup-section"><div class="followup-section-label">👤 추가 구매자 문의</div><div class="followup-section-body">${eh(fu.buyerInquiry)}</div></div>`:''}
-        ${fu.sellerInquiry?`<div class="followup-section"><div class="followup-section-label">🏪 추가 판매자 문의</div><div class="followup-section-body">${eh(fu.sellerInquiry)}</div></div>`:''}
+        ${buyerTxt?`<div class="followup-section"><div class="followup-section-label">👤 추가 구매자 문의</div><div class="followup-section-body">${eh(buyerTxt)}</div></div>`:''}
+        ${sellerTxt?`<div class="followup-section"><div class="followup-section-label">🏪 추가 판매자 문의</div><div class="followup-section-body">${eh(sellerTxt)}</div></div>`:''}
         ${fu.result?`
           <div class="followup-section"><div class="followup-section-label">📋 재분석 요약</div><div class="followup-section-body">${eh(fu.result.summary||'')}</div></div>
+          ${standardTxt?`<div class="followup-section"><div class="followup-section-label">📐 기준 적용 근거</div><div class="followup-section-body">${eh(standardTxt)}</div></div>`:''}
           <div class="followup-section"><div class="followup-section-label">👤 구매자 회신 초안</div><div class="followup-section-body">${eh(fu.result.buyerReply||'')}</div></div>
           <div class="followup-section"><div class="followup-section-label">🏪 판매자 회신 초안</div><div class="followup-section-body">${eh(fu.result.sellerReply||'')}</div></div>
           <div class="followup-section"><div class="followup-section-label">💡 처리 방향 권고</div><div class="followup-section-body">${eh(fu.result.recommendation||'')}</div></div>
         `:''}
-      </div>`).join('') : '';
+      </div>`;
+    }).join('') : '';
 
     document.getElementById('moBody').innerHTML=`
       <div style="font-size:17px;font-weight:700;margin-bottom:3px">${eh(c.caseTitle||'제목 없음')}</div>
@@ -453,12 +570,10 @@ async function viewCase(id){
         <div class="followup-title">🔄 추가 문의 / 재인입 처리</div>
         ${followUpHistoryHtml ? `<div class="followup-history">${followUpHistoryHtml}</div>` : ''}
         <div class="followup-input">
-          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;">추가 구매자 문의</div>
-          <textarea id="fuBuyer" rows="3" placeholder="미수긍 후 재인입된 구매자 추가 문의 내용"></textarea>
-          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;margin-top:4px;">추가 판매자 문의</div>
-          <textarea id="fuSeller" rows="3" placeholder="판매자 추가 문의 내용 (없으면 비워두세요)"></textarea>
+          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;">추가 상담 내역 붙여넣기 (구매자·판매자 여러 차례 재인입분을 한번에 붙여넣으면 AI가 자동으로 나눠 분석합니다)</div>
+          <textarea id="fuRaw" rows="5" placeholder="미수긍 후 재인입된 채팅/문의 내역을 그대로 붙여넣으세요. 구매자·판매자 내용이 섞여 있어도 됩니다."></textarea>
           <button class="followup-send-btn" id="fuBtn" onclick="sendFollowUp('${id}',\`${esc(JSON.stringify(r))}\`)">
-            🔄 추가 문의 AI 재분석
+            🔄 추가 문의 자동분류 + AI 재분석
           </button>
         </div>
       </div>`;
@@ -467,41 +582,49 @@ async function viewCase(id){
 }
 
 async function sendFollowUp(caseId, resultJson){
-  const buyerInquiry=document.getElementById('fuBuyer')?.value.trim();
-  const sellerInquiry=document.getElementById('fuSeller')?.value.trim();
-  if(!buyerInquiry&&!sellerInquiry){ toast('추가 문의 내용을 입력해주세요.','err'); return; }
+  const raw=document.getElementById('fuRaw')?.value.trim();
+  if(!raw){ toast('추가 상담 내역을 입력해주세요.','err'); return; }
 
   const btn=document.getElementById('fuBtn');
-  btn.disabled=true; btn.textContent='재분석 중...';
-  document.getElementById('ldTxt').textContent='추가 문의를 재분석하고 있습니다...';
+  btn.disabled=true; btn.textContent='자동 분류 중...';
+  document.getElementById('ldTxt').textContent='추가 문의를 자동 분류하고 있습니다...';
   document.getElementById('ld').classList.add('show');
 
   try{
+    // 1) 붙여넣은 원문을 구매자/판매자 차수별로 자동 분류
+    const parseRes=await fetch('/api/parse-inquiries',{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rawText:raw})
+    });
+    const parseData=await parseRes.json();
+    if(!parseData.success) throw new Error(parseData.error);
+    const buyerInquiries=parseData.buyerInquiries||[], sellerInquiries=parseData.sellerInquiries||[];
+    if(!buyerInquiries.length && !sellerInquiries.length){ throw new Error('구매자/판매자 문의를 구분하지 못했습니다. 원문을 확인해주세요.'); }
+
+    document.getElementById('ldTxt').textContent='추가 문의를 재분석하고 있습니다...';
+    btn.textContent='재분석 중...';
+
     let prevResult={};
     try{ prevResult=JSON.parse(resultJson); }catch{}
-    const followUpContext=`요약: ${prevResult.summary||''}\n분석: ${prevResult.analysis||''}\n처리방향: ${prevResult.recommendation||''}`;
+    const followUpContext=`요약: ${prevResult.summary||''}\n분석: ${prevResult.analysis||''}\n적용기준: ${prevResult.appliedItemCategory||''} ${prevResult.appliedArticle||''} ${prevResult.suggestedResolution||''}\n처리방향: ${prevResult.recommendation||''}`;
 
+    // 2) 재분석 (기존 근거 문서/사진 없이 신규 문의 + 기존 맥락만으로 재판단)
     const res=await fetch('/api/analyze',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        buyerInquiries:buyerInquiry?[{type:'추가 문의',content:buyerInquiry}]:[],
-        sellerInquiries:sellerInquiry?[{type:'추가 문의',content:sellerInquiry}]:[],
-        followUpContext
-      })
+      body:JSON.stringify({ buyerInquiries, sellerInquiries, followUpContext })
     });
     const data=await res.json();
     if(!data.success) throw new Error(data.error);
 
     await fetch(`/api/cases/${caseId}/followup`,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ buyerInquiry, sellerInquiry, result:data.result })
+      body:JSON.stringify({ buyerInquiries, sellerInquiries, result:data.result })
     });
 
     toast('재분석 완료! 저장됐습니다 ✓','ok');
     document.getElementById('modal').classList.remove('show');
     setTimeout(()=>viewCase(caseId),300);
   }catch(e){ toast('재분석 오류: '+e.message,'err'); }
-  finally{ btn.disabled=false; btn.textContent='🔄 추가 문의 AI 재분석'; document.getElementById('ld').classList.remove('show'); }
+  finally{ btn.disabled=false; btn.textContent='🔄 추가 문의 자동분류 + AI 재분석'; document.getElementById('ld').classList.remove('show'); }
 }
 
 async function exportExcel(){
@@ -518,6 +641,9 @@ async function exportExcel(){
       '분쟁 요약': c.result?.summary||'',
       '구매자 문의 유형': (c.buyer_inquiries||[]).map(i=>i.type).filter(Boolean).join(', '),
       '판매자 문의 유형': (c.seller_inquiries||[]).map(i=>i.type).filter(Boolean).join(', '),
+      '적용 품목(별표2)': c.result?.appliedItemCategory||'',
+      '근거 조항(별표1)': c.result?.appliedArticle||'',
+      '권고안(기준 근거)': c.result?.suggestedResolution||'',
       '구매자 회신 초안': c.result?.buyerReply||'',
       '판매자 회신 초안': c.result?.sellerReply||'',
       '처리 방향 권고': c.result?.recommendation||'',
@@ -525,7 +651,7 @@ async function exportExcel(){
     }));
 
     const ws=XLSX.utils.json_to_sheet(rows);
-    ws['!cols']=[{wch:25},{wch:20},{wch:20},{wch:50},{wch:20},{wch:20},{wch:50},{wch:50},{wch:50},{wch:10}];
+    ws['!cols']=[{wch:25},{wch:20},{wch:20},{wch:50},{wch:20},{wch:20},{wch:22},{wch:22},{wch:40},{wch:50},{wch:50},{wch:50},{wch:10}];
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,ws,'분쟁케이스');
     XLSX.writeFile(wb,`중고나라_분쟁케이스_${new Date().toLocaleDateString('ko-KR').replace(/\./g,'').replace(/ /g,'')}.xlsx`);
@@ -543,6 +669,7 @@ function showView(v){
   document.getElementById('btnList').classList.toggle('active',v==='list');
   if(v==='list') loadCases();
 }
+
 
 function toast(msg,type=''){
   const t=document.getElementById('toast');
