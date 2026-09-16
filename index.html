@@ -251,7 +251,10 @@ textarea{resize:vertical;line-height:1.7;}
       <div style="font-size:18px;font-weight:700;margin-bottom:3px;">케이스 목록</div>
       <div style="font-size:13px;color:var(--muted);">저장된 분쟁 케이스를 조회하고 관리합니다.</div>
     </div>
-    <button class="excel-btn" onclick="exportExcel()">📊 엑셀 다운로드</button>
+    <div style="display:flex;gap:8px;">
+      <button class="excel-btn" onclick="exportExcel()">📊 엑셀 다운로드</button>
+      <button class="excel-btn" onclick="exportDisputeLogExcel()">📐 분쟁기록_로그 전체 다운로드</button>
+    </div>
   </div>
   <div class="cl" id="caseList"></div>
 </div>
@@ -657,6 +660,51 @@ async function exportExcel(){
     XLSX.writeFile(wb,`중고나라_분쟁케이스_${new Date().toLocaleDateString('ko-KR').replace(/\./g,'').replace(/ /g,'')}.xlsx`);
     toast('엑셀 다운로드 완료 ✓','ok');
   }catch{ toast('엑셀 다운로드 실패','err'); }
+}
+
+async function exportDisputeLogExcel(){
+  try{
+    toast('분쟁기록_로그 파일 준비 중...','');
+    const res=await fetch('/api/cases/export/excel');
+    const data=await res.json();
+    if(!data.success) throw new Error();
+
+    const rows=[];
+    let no=1;
+    data.cases.forEach(c=>{
+      const pushRow=(r,label)=>{
+        const isUsed = r?.appliedItemCategory && r.appliedItemCategory!=='정보 부족' && r.appliedItemCategory!=='해당없음';
+        rows.push({
+          '번호': no++,
+          '기록일': new Date(c.created_at).toISOString().slice(0,10),
+          '담당자': '',
+          '케이스/티켓번호': label?`${c.case_title||'제목 없음'} (${label})`:(c.case_title||'제목 없음'),
+          '거래유형': '',
+          '품목대분류': r?.appliedItemCategory||'',
+          '세부품목명': c.product_name||'',
+          '하자유형': r?.appliedDefectLevel||'',
+          '수령후경과기간': r?.appliedPeriod||'',
+          '기준 활용여부': isUsed?'Y':'N',
+          '활용근거(별표1 조항)': r?.appliedArticle||'',
+          '활용근거(별표2 품목표)': r?.appliedItemCategory||'',
+          '처리결과': '',
+          '미활용 사유(N인 경우)': isUsed?'':'정보 부족으로 품목표 미적용',
+          '비고': r?.summary||''
+        });
+      };
+      pushRow(c.result, null);
+      (c.follow_ups||[]).forEach((fu,i)=>pushRow(fu.result, `추가문의 ${i+1}차`));
+    });
+
+    if(!rows.length){ toast('저장된 케이스가 없습니다.','err'); return; }
+
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:6},{wch:12},{wch:10},{wch:28},{wch:10},{wch:18},{wch:16},{wch:14},{wch:14},{wch:12},{wch:26},{wch:22},{wch:16},{wch:24},{wch:40}];
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'분쟁기록_로그');
+    XLSX.writeFile(wb,`분쟁기록_로그_전체_${new Date().toISOString().slice(0,10)}.xlsx`);
+    toast(`엑셀 다운로드 완료 ✓ (총 ${rows.length}건)`,'ok');
+  }catch{ toast('분쟁기록_로그 다운로드 실패','err'); }
 }
 
 function closeMo(e){ if(e.target===document.getElementById('modal')) closeMoD(); }
